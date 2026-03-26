@@ -1,67 +1,90 @@
 # ============================================================
-#  Makefile for bmp-parser
+#  Universal Image Processing Library — Makefile
 #  Targets: all (default), clean, run
 # ============================================================
 
 # --- Toolchain ---
-CC      := gcc
+CC := gcc
 
-# --- Flags ---
-# -Wall -Wextra  : Enable broad and extended warnings.
-# -std=c11       : C11 is required because we use _Static_assert, which was
-#                  introduced in C11. C99 does not have it.
-# -pedantic      : Reject any code that is not strictly ISO-compliant.
-# -Iinclude      : Add /include to the header search path so source files
-#                  can use #include <bmp_core.h> without relative ../paths.
-CFLAGS  := -Wall -Wextra -std=c11 -pedantic -Iinclude
+# --- Compiler flags ---
+# -Wall -Wextra  : broad + extended warnings
+# -std=c11       : required for _Static_assert and designated initialisers
+# -pedantic      : reject non-ISO extensions
+# -Iinclude      : find all public headers without relative paths
+CFLAGS := -Wall -Wextra -std=c11 -pedantic -Iinclude
+
+# --- Linker flags ---
+# Uncomment the libraries you have installed:
+#
+#   libpng:          sudo apt install libpng-dev          (Debian/Ubuntu)
+#                    brew install libpng                  (macOS)
+#                    pacman -S mingw-w64-x86_64-libpng    (MSYS2/MinGW)
+#
+#   libjpeg-turbo:   sudo apt install libjpeg-turbo8-dev
+#                    brew install jpeg-turbo
+#                    pacman -S mingw-w64-x86_64-libjpeg-turbo
+#
+# When you uncomment a -l flag, also uncomment the matching -DHAVE_* flag
+# so the driver code compiles with actual library calls instead of stubs.
+LDFLAGS :=
+# LDFLAGS += -lpng
+# LDFLAGS += -ljpeg
+
+# Matching compile-time feature flags (mirror LDFLAGS choices above):
+# CFLAGS += -DHAVE_LIBPNG
+# CFLAGS += -DHAVE_LIBJPEG
+
+# --- Target executable ---
+TARGET := image_tool
 
 # --- Directories ---
 SRC_DIR := src
 OBJ_DIR := obj
 
-# --- Target executable ---
-TARGET  := bmp_tool
+# --- Source discovery ---
+# Collect every .c file under src/ AND src/drivers/.
+# Adding a new driver (e.g., src/drivers/tiff_driver.c) is picked up
+# automatically — no changes needed in this Makefile.
+SRCS := $(wildcard $(SRC_DIR)/*.c) \
+        $(wildcard $(SRC_DIR)/drivers/*.c)
 
-# --- Source and Object files ---
-# Automatically find all .c files under /src so you never need to
-# manually update this list when adding new translation units.
-SRCS    := $(wildcard $(SRC_DIR)/*.c)
-OBJS    := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
+# --- Object files ---
+# Map:  src/foo.c           -> obj/foo.o
+#       src/drivers/bar.c   -> obj/drivers/bar.o
+OBJS := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
 
 # ============================================================
-#  Default target: build the executable
+#  Default target
 # ============================================================
-all: $(OBJ_DIR) $(TARGET)
+.PHONY: all clean run
+
+all: $(TARGET)
 
 # Link all object files into the final binary.
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "Build successful -> $(TARGET)"
 
-# Compile each .c file into a .o object file inside /obj.
-# The $< is the first prerequisite (.c file), $@ is the target (.o file).
-# Separating compilation from linking lets make rebuild only changed files.
+# ============================================================
+#  Compilation rule — handles both src/*.c and src/drivers/*.c
+#
+#  '@mkdir -p $(dir $@)' creates obj/drivers/ the first time a driver
+#  object file is needed, so make never fails writing to a missing dir.
+# ============================================================
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Create the object directory if it does not exist.
-$(OBJ_DIR):
-	mkdir -p $(OBJ_DIR)
-
 # ============================================================
-#  clean: remove all build artefacts
+#  clean — remove all build artefacts
 # ============================================================
 clean:
-	rm -rf $(OBJ_DIR) $(TARGET)
-	@echo "Cleaned build artefacts."
+	rm -rf $(OBJ_DIR) $(TARGET) $(TARGET).exe
+	@echo "Cleaned."
 
 # ============================================================
-#  run: quick smoke-test shortcut (override ARGS on the CLI)
-#  Usage: make run ARGS="info test_images/sample.bmp"
+#  run — quick smoke-test shortcut
+#  Usage: make run ARGS="info test_images/photo.bmp"
 # ============================================================
 run: all
 	./$(TARGET) $(ARGS)
-
-# Declare targets that are not real files so make doesn't get
-# confused if a file named 'clean' or 'run' exists in the tree.
-.PHONY: all clean run
